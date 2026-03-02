@@ -2,24 +2,14 @@
     RoseX Admin Panel — Murderer vs Sheriff Duels
     ================================================
     USAGE:
-      1. Place this LocalScript inside StarterPlayerScripts (or execute via executor).
-      2. The Obsidian UI library is loaded automatically via loadstring from GitHub.
-      3. Press [RightShift] (default Obsidian keybind) to toggle the panel.
-      4. Use the tabs: Movement / ESP / Utility
-
-    FEATURES:
-      • Speed Boost  — slider to multiply WalkSpeed (default 16)
-      • Jump Boost   — slider to multiply JumpPower (default 50)
-      • ESP Boxes    — draws highlight boxes around enemy players
-      • ESP Labels   — shows player names + team role above boxes
-      • Infinite Jump — toggle to jump infinitely
-      • Noclip       — toggle to walk through walls
+      1. Paste into your executor and execute, OR put in a LocalScript in StarterPlayerScripts.
+      2. Press [RightControl] to toggle the panel open/close.
+      3. Tabs: Movement | ESP | Utility
 --]]
 
 -- ── Load Obsidian ──────────────────────────────────────────────────────────
-local Obsidian = loadstring(
-    game:HttpGet("https://raw.githubusercontent.com/deividcomsono/Obsidian/main/Library.lua")
-)()
+local repo    = "https://raw.githubusercontent.com/deividcomsono/Obsidian/main/"
+local Library = loadstring(game:HttpGet(repo .. "Library.lua"))()
 
 -- ── Services ───────────────────────────────────────────────────────────────
 local Players          = game:GetService("Players")
@@ -27,7 +17,6 @@ local RunService       = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 
 local LocalPlayer = Players.LocalPlayer
-local Camera      = workspace.CurrentCamera
 
 -- ── State ──────────────────────────────────────────────────────────────────
 local ESPEnabled    = false
@@ -37,17 +26,8 @@ local SpeedValue    = 16
 local JumpValue     = 50
 
 -- ── Helpers ────────────────────────────────────────────────────────────────
-local function getCharacter(player)
-    return player and player.Character
-end
-
-local function getRootPart(player)
-    local char = getCharacter(player)
-    return char and (char:FindFirstChild("HumanoidRootPart") or char:FindFirstChild("UpperTorso"))
-end
-
 local function getHumanoid(player)
-    local char = getCharacter(player)
+    local char = player and player.Character
     return char and char:FindFirstChildOfClass("Humanoid")
 end
 
@@ -59,7 +39,6 @@ local function isEnemy(player)
     return true
 end
 
--- ── Speed / Jump ───────────────────────────────────────────────────────────
 local function applyMovement()
     local hum = getHumanoid(LocalPlayer)
     if hum then
@@ -76,214 +55,154 @@ end)
 
 -- ── Noclip ─────────────────────────────────────────────────────────────────
 RunService.Stepped:Connect(function()
-    if NoclipEnabled then
-        local char = getCharacter(LocalPlayer)
-        if char then
-            for _, part in ipairs(char:GetDescendants()) do
-                if part:IsA("BasePart") then
-                    part.CanCollide = false
-                end
+    if not NoclipEnabled then return end
+    local char = LocalPlayer.Character
+    if char then
+        for _, part in ipairs(char:GetDescendants()) do
+            if part:IsA("BasePart") then
+                part.CanCollide = false
             end
         end
     end
 end)
 
 -- ── ESP ────────────────────────────────────────────────────────────────────
-local function createESPForPlayer(player)
+local function createESP(player)
     if ESPBoxes[player] then return end
 
-    local highlight = Instance.new("SelectionBox")
-    highlight.Color3              = Color3.fromRGB(255, 60, 100)
-    highlight.LineThickness       = 0.05
-    highlight.SurfaceTransparency = 1
+    local box = Instance.new("SelectionBox")
+    box.Color3              = Color3.fromRGB(255, 60, 100)
+    box.LineThickness       = 0.06
+    box.SurfaceTransparency = 1
 
-    local billGui = Instance.new("BillboardGui")
-    billGui.AlwaysOnTop = true
-    billGui.Size        = UDim2.new(0, 120, 0, 30)
-    billGui.StudsOffset = Vector3.new(0, 3.5, 0)
+    local bg = Instance.new("BillboardGui")
+    bg.AlwaysOnTop = true
+    bg.Size        = UDim2.new(0, 120, 0, 28)
+    bg.StudsOffset = Vector3.new(0, 4, 0)
 
-    local label = Instance.new("TextLabel", billGui)
-    label.BackgroundTransparency = 1
-    label.Size                   = UDim2.new(1, 0, 1, 0)
-    label.TextColor3             = Color3.fromRGB(255, 80, 120)
-    label.TextStrokeTransparency = 0.4
-    label.Font                   = Enum.Font.GothamBold
-    label.TextScaled             = true
-    label.Text                   = player.Name
+    local lbl = Instance.new("TextLabel", bg)
+    lbl.BackgroundTransparency = 1
+    lbl.Size                   = UDim2.new(1, 0, 1, 0)
+    lbl.TextColor3             = Color3.fromRGB(255, 80, 120)
+    lbl.TextStrokeTransparency = 0.3
+    lbl.Font                   = Enum.Font.GothamBold
+    lbl.TextScaled             = true
+    lbl.Text                   = player.Name
 
-    ESPBoxes[player] = { box = highlight, billboard = billGui, label = label }
+    ESPBoxes[player] = { box = box, bg = bg, lbl = lbl }
 
-    local function attachESP(char)
+    local function attach(char)
         if not ESPEnabled then return end
         local root = char:WaitForChild("HumanoidRootPart", 5)
         if root then
-            highlight.Adornee = char
-            highlight.Parent  = workspace
-            billGui.Adornee   = root
-            billGui.Parent    = workspace
+            box.Adornee = char
+            box.Parent  = workspace
+            bg.Adornee  = root
+            bg.Parent   = workspace
         end
     end
 
-    if player.Character then attachESP(player.Character) end
-    player.CharacterAdded:Connect(attachESP)
+    if player.Character then attach(player.Character) end
+    player.CharacterAdded:Connect(attach)
 end
 
-local function removeESPForPlayer(player)
-    local entry = ESPBoxes[player]
-    if entry then
-        entry.box:Destroy()
-        entry.billboard:Destroy()
+local function removeESP(player)
+    local e = ESPBoxes[player]
+    if e then
+        e.box:Destroy()
+        e.bg:Destroy()
         ESPBoxes[player] = nil
     end
 end
 
 local function enableESP()
     ESPEnabled = true
-    for _, player in ipairs(Players:GetPlayers()) do
-        if isEnemy(player) then
-            createESPForPlayer(player)
-        end
+    for _, p in ipairs(Players:GetPlayers()) do
+        if isEnemy(p) then createESP(p) end
     end
 end
 
 local function disableESP()
     ESPEnabled = false
-    for player, _ in pairs(ESPBoxes) do
-        removeESPForPlayer(player)
-    end
+    for p in pairs(ESPBoxes) do removeESP(p) end
 end
 
-Players.PlayerAdded:Connect(function(player)
-    if ESPEnabled and isEnemy(player) then
-        createESPForPlayer(player)
-    end
+Players.PlayerAdded:Connect(function(p)
+    if ESPEnabled and isEnemy(p) then createESP(p) end
 end)
+Players.PlayerRemoving:Connect(removeESP)
 
-Players.PlayerRemoving:Connect(function(player)
-    removeESPForPlayer(player)
-end)
-
--- ── Build UI ───────────────────────────────────────────────────────────────
-local Window = Obsidian:CreateWindow({
-    Title  = "🌹 RoseX",
-    Theme  = "Dark",
-    Accent = Color3.fromRGB(220, 60, 100),
+-- ── Window ─────────────────────────────────────────────────────────────────
+local Window = Library:CreateWindow({
+    Title          = "🌹 RoseX",
+    Footer         = "Murderer vs Sheriff",
+    Center         = true,
+    AutoShow       = true,
+    ToggleKeybind  = Enum.KeyCode.RightControl,
 })
 
--- ┌─ TAB 1 : MOVEMENT ──────────────────────────────────────────────────────┐
-local MovTab = Window:CreateTab({
-    Name = "⚡ Movement",
-    Icon = "rbxassetid://7733960981",
-})
+-- ┌─ TAB 1 : MOVEMENT ───────────────────────────────────────────────────────
+local MovTab = Window:AddTab("Movement", "zap")
+local MovBox = MovTab:AddLeftGroupbox("Speed & Jump")
+local MovBox2 = MovTab:AddRightGroupbox("Misc")
 
-MovTab:CreateSlider({
-    Name     = "Walk Speed",
-    Min      = 16,
-    Max      = 250,
-    Default  = 16,
+MovBox:AddSlider("WalkSpeed", {
+    Text    = "Walk Speed",
+    Default = 16,
+    Min     = 16,
+    Max     = 250,
+    Suffix  = " studs/s",
     Callback = function(val)
         SpeedValue = val
         applyMovement()
     end,
 })
 
-MovTab:CreateSlider({
-    Name     = "Jump Power",
-    Min      = 50,
-    Max      = 400,
-    Default  = 50,
+MovBox:AddSlider("JumpPower", {
+    Text    = "Jump Power",
+    Default = 50,
+    Min     = 50,
+    Max     = 400,
+    Suffix  = " power",
     Callback = function(val)
         JumpValue = val
         applyMovement()
     end,
 })
 
-MovTab:CreateToggle({
-    Name     = "Noclip",
-    Default  = false,
+MovBox:AddButton({
+    Text = "Reset to Defaults",
+    Func = function()
+        SpeedValue = 16
+        JumpValue  = 50
+        applyMovement()
+        -- Update slider display if supported
+        Library.Options.WalkSpeed:SetValue(16)
+        Library.Options.JumpPower:SetValue(50)
+    end,
+})
+
+MovBox2:AddToggle("Noclip", {
+    Text    = "Noclip",
+    Default = false,
+    Tooltip = "Walk through walls",
     Callback = function(state)
         NoclipEnabled = state
         if not state then
-            local char = getCharacter(LocalPlayer)
+            local char = LocalPlayer.Character
             if char then
                 for _, part in ipairs(char:GetDescendants()) do
-                    if part:IsA("BasePart") then
-                        part.CanCollide = true
-                    end
+                    if part:IsA("BasePart") then part.CanCollide = true end
                 end
             end
         end
     end,
 })
 
-MovTab:CreateButton({
-    Name     = "Reset Speed & Jump",
-    Callback = function()
-        SpeedValue = 16
-        JumpValue  = 50
-        applyMovement()
-    end,
-})
-
--- ┌─ TAB 2 : ESP ───────────────────────────────────────────────────────────┐
-local ESPTab = Window:CreateTab({
-    Name = "👁 ESP",
-    Icon = "rbxassetid://7733715400",
-})
-
-ESPTab:CreateToggle({
-    Name     = "Enemy ESP Boxes",
-    Default  = false,
-    Callback = function(state)
-        if state then enableESP() else disableESP() end
-    end,
-})
-
-ESPTab:CreateToggle({
-    Name     = "Show Name Labels",
-    Default  = true,
-    Callback = function(state)
-        for _, entry in pairs(ESPBoxes) do
-            entry.label.Visible = state
-        end
-    end,
-})
-
-ESPTab:CreateColorPicker({
-    Name     = "ESP Box Color",
-    Default  = Color3.fromRGB(255, 60, 100),
-    Callback = function(color)
-        for _, entry in pairs(ESPBoxes) do
-            entry.box.Color3       = color
-            entry.label.TextColor3 = color
-        end
-    end,
-})
-
-ESPTab:CreateSlider({
-    Name     = "Box Thickness",
-    Min      = 1,
-    Max      = 10,
-    Default  = 5,
-    Callback = function(val)
-        local thickness = val / 100
-        for _, entry in pairs(ESPBoxes) do
-            entry.box.LineThickness = thickness
-        end
-    end,
-})
-
--- ┌─ TAB 3 : UTILITY ───────────────────────────────────────────────────────┐
-local UtilTab = Window:CreateTab({
-    Name = "🛠 Utility",
-    Icon = "rbxassetid://7734053495",
-})
-
-UtilTab:CreateLabel("🌹 RoseX — Murderer vs Sheriff")
-
-UtilTab:CreateToggle({
-    Name     = "Infinite Jump",
-    Default  = false,
+MovBox2:AddToggle("InfJump", {
+    Text    = "Infinite Jump",
+    Default = false,
+    Tooltip = "Jump repeatedly in the air",
     Callback = function(state)
         if state then
             _G.RoseX_InfJump = UserInputService.JumpRequest:Connect(function()
@@ -299,15 +218,71 @@ UtilTab:CreateToggle({
     end,
 })
 
-UtilTab:CreateToggle({
-    Name     = "Anti-AFK",
-    Default  = true,
+-- ┌─ TAB 2 : ESP ────────────────────────────────────────────────────────────
+local ESPTab = Window:AddTab("ESP", "eye")
+local ESPBox = ESPTab:AddLeftGroupbox("Enemy ESP")
+local ESPBox2 = ESPTab:AddRightGroupbox("Appearance")
+
+ESPBox:AddToggle("ESPToggle", {
+    Text    = "Enable ESP",
+    Default = false,
+    Tooltip = "Draw boxes around enemies",
+    Callback = function(state)
+        if state then enableESP() else disableESP() end
+    end,
+})
+
+ESPBox:AddToggle("ESPNames", {
+    Text    = "Show Names",
+    Default = true,
+    Tooltip = "Show player names above boxes",
+    Callback = function(state)
+        for _, e in pairs(ESPBoxes) do
+            e.lbl.Visible = state
+        end
+    end,
+})
+
+ESPBox:AddSlider("ESPThickness", {
+    Text    = "Box Thickness",
+    Default = 6,
+    Min     = 1,
+    Max     = 20,
+    Callback = function(val)
+        for _, e in pairs(ESPBoxes) do
+            e.box.LineThickness = val / 100
+        end
+    end,
+})
+
+ESPBox2:AddColorpicker("ESPColor", {
+    Title   = "Box Color",
+    Default = Color3.fromRGB(255, 60, 100),
+    Callback = function(color)
+        for _, e in pairs(ESPBoxes) do
+            e.box.Color3   = color
+            e.lbl.TextColor3 = color
+        end
+    end,
+})
+
+ESPBox2:AddLabel("Enemies only (opposite team)")
+
+-- ┌─ TAB 3 : UTILITY ────────────────────────────────────────────────────────
+local UtilTab = Window:AddTab("Utility", "wrench")
+local UtilBox = UtilTab:AddLeftGroupbox("Tools")
+local UtilBox2 = UtilTab:AddRightGroupbox("Info")
+
+UtilBox:AddToggle("AntiAFK", {
+    Text    = "Anti-AFK",
+    Default = true,
+    Tooltip = "Prevents automatic kick for being idle",
     Callback = function(state)
         if state then
             _G.RoseX_AntiAFK = RunService.Heartbeat:Connect(function()
                 LocalPlayer.Idled:Wait()
-                local vip = game:GetService("VirtualInputManager")
                 pcall(function()
+                    local vip = game:GetService("VirtualInputManager")
                     vip:SendKeyEvent(true,  Enum.KeyCode.W, false, game)
                     vip:SendKeyEvent(false, Enum.KeyCode.W, false, game)
                 end)
@@ -321,22 +296,31 @@ UtilTab:CreateToggle({
     end,
 })
 
-UtilTab:CreateButton({
-    Name     = "Rejoin Server",
-    Callback = function()
-        local TeleportService = game:GetService("TeleportService")
-        TeleportService:Teleport(game.PlaceId, LocalPlayer)
+UtilBox:AddButton({
+    Text    = "Rejoin Server",
+    Tooltip = "Teleport back into the same game",
+    Func    = function()
+        game:GetService("TeleportService"):Teleport(game.PlaceId, LocalPlayer)
     end,
 })
 
-UtilTab:CreateButton({
-    Name     = "Copy My UserID",
-    Callback = function()
+UtilBox:AddButton({
+    Text    = "Copy UserID",
+    Tooltip = "Copies your Roblox UserID to clipboard",
+    Func    = function()
         setclipboard(tostring(LocalPlayer.UserId))
+        Library:Notify({ Title = "RoseX", Content = "UserID copied!", Duration = 2 })
     end,
 })
 
-UtilTab:CreateLabel("Panel toggle: RightShift (Obsidian default)")
+UtilBox2:AddLabel("🌹 RoseX Panel")
+UtilBox2:AddLabel("Toggle: RightControl")
+UtilBox2:AddLabel("Ver: 1.0 | MVS Duels")
 
 -- ── Done ───────────────────────────────────────────────────────────────────
-print("[RoseX] Admin panel loaded. Welcome, " .. LocalPlayer.Name .. "!")
+Library:Notify({
+    Title    = "🌹 RoseX",
+    Content  = "Loaded! Welcome, " .. LocalPlayer.Name,
+    Duration = 4,
+})
+print("[RoseX] Loaded successfully for " .. LocalPlayer.Name)
