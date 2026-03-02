@@ -1,0 +1,342 @@
+--[[
+    RoseX Admin Panel — Murderer vs Sheriff Duels
+    ================================================
+    USAGE:
+      1. Place this LocalScript inside StarterPlayerScripts (or execute via executor).
+      2. The Obsidian UI library is loaded automatically via loadstring from GitHub.
+      3. Press [RightShift] (default Obsidian keybind) to toggle the panel.
+      4. Use the tabs: Movement / ESP / Utility
+
+    FEATURES:
+      • Speed Boost  — slider to multiply WalkSpeed (default 16)
+      • Jump Boost   — slider to multiply JumpPower (default 50)
+      • ESP Boxes    — draws highlight boxes around enemy players
+      • ESP Labels   — shows player names + team role above boxes
+      • Infinite Jump — toggle to jump infinitely
+      • Noclip       — toggle to walk through walls
+--]]
+
+-- ── Load Obsidian ──────────────────────────────────────────────────────────
+local Obsidian = loadstring(
+    game:HttpGet("https://raw.githubusercontent.com/deividcomsono/Obsidian/main/Library.lua")
+)()
+
+-- ── Services ───────────────────────────────────────────────────────────────
+local Players          = game:GetService("Players")
+local RunService       = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+
+local LocalPlayer = Players.LocalPlayer
+local Camera      = workspace.CurrentCamera
+
+-- ── State ──────────────────────────────────────────────────────────────────
+local ESPEnabled    = false
+local ESPBoxes      = {}
+local NoclipEnabled = false
+local SpeedValue    = 16
+local JumpValue     = 50
+
+-- ── Helpers ────────────────────────────────────────────────────────────────
+local function getCharacter(player)
+    return player and player.Character
+end
+
+local function getRootPart(player)
+    local char = getCharacter(player)
+    return char and (char:FindFirstChild("HumanoidRootPart") or char:FindFirstChild("UpperTorso"))
+end
+
+local function getHumanoid(player)
+    local char = getCharacter(player)
+    return char and char:FindFirstChildOfClass("Humanoid")
+end
+
+local function isEnemy(player)
+    if player == LocalPlayer then return false end
+    if LocalPlayer.Team and player.Team then
+        return player.Team ~= LocalPlayer.Team
+    end
+    return true
+end
+
+-- ── Speed / Jump ───────────────────────────────────────────────────────────
+local function applyMovement()
+    local hum = getHumanoid(LocalPlayer)
+    if hum then
+        hum.WalkSpeed = SpeedValue
+        hum.JumpPower = JumpValue
+    end
+end
+
+LocalPlayer.CharacterAdded:Connect(function(char)
+    char:WaitForChild("Humanoid")
+    task.wait(0.1)
+    applyMovement()
+end)
+
+-- ── Noclip ─────────────────────────────────────────────────────────────────
+RunService.Stepped:Connect(function()
+    if NoclipEnabled then
+        local char = getCharacter(LocalPlayer)
+        if char then
+            for _, part in ipairs(char:GetDescendants()) do
+                if part:IsA("BasePart") then
+                    part.CanCollide = false
+                end
+            end
+        end
+    end
+end)
+
+-- ── ESP ────────────────────────────────────────────────────────────────────
+local function createESPForPlayer(player)
+    if ESPBoxes[player] then return end
+
+    local highlight = Instance.new("SelectionBox")
+    highlight.Color3              = Color3.fromRGB(255, 60, 100)
+    highlight.LineThickness       = 0.05
+    highlight.SurfaceTransparency = 1
+
+    local billGui = Instance.new("BillboardGui")
+    billGui.AlwaysOnTop = true
+    billGui.Size        = UDim2.new(0, 120, 0, 30)
+    billGui.StudsOffset = Vector3.new(0, 3.5, 0)
+
+    local label = Instance.new("TextLabel", billGui)
+    label.BackgroundTransparency = 1
+    label.Size                   = UDim2.new(1, 0, 1, 0)
+    label.TextColor3             = Color3.fromRGB(255, 80, 120)
+    label.TextStrokeTransparency = 0.4
+    label.Font                   = Enum.Font.GothamBold
+    label.TextScaled             = true
+    label.Text                   = player.Name
+
+    ESPBoxes[player] = { box = highlight, billboard = billGui, label = label }
+
+    local function attachESP(char)
+        if not ESPEnabled then return end
+        local root = char:WaitForChild("HumanoidRootPart", 5)
+        if root then
+            highlight.Adornee = char
+            highlight.Parent  = workspace
+            billGui.Adornee   = root
+            billGui.Parent    = workspace
+        end
+    end
+
+    if player.Character then attachESP(player.Character) end
+    player.CharacterAdded:Connect(attachESP)
+end
+
+local function removeESPForPlayer(player)
+    local entry = ESPBoxes[player]
+    if entry then
+        entry.box:Destroy()
+        entry.billboard:Destroy()
+        ESPBoxes[player] = nil
+    end
+end
+
+local function enableESP()
+    ESPEnabled = true
+    for _, player in ipairs(Players:GetPlayers()) do
+        if isEnemy(player) then
+            createESPForPlayer(player)
+        end
+    end
+end
+
+local function disableESP()
+    ESPEnabled = false
+    for player, _ in pairs(ESPBoxes) do
+        removeESPForPlayer(player)
+    end
+end
+
+Players.PlayerAdded:Connect(function(player)
+    if ESPEnabled and isEnemy(player) then
+        createESPForPlayer(player)
+    end
+end)
+
+Players.PlayerRemoving:Connect(function(player)
+    removeESPForPlayer(player)
+end)
+
+-- ── Build UI ───────────────────────────────────────────────────────────────
+local Window = Obsidian:CreateWindow({
+    Title  = "🌹 RoseX",
+    Theme  = "Dark",
+    Accent = Color3.fromRGB(220, 60, 100),
+})
+
+-- ┌─ TAB 1 : MOVEMENT ──────────────────────────────────────────────────────┐
+local MovTab = Window:CreateTab({
+    Name = "⚡ Movement",
+    Icon = "rbxassetid://7733960981",
+})
+
+MovTab:CreateSlider({
+    Name     = "Walk Speed",
+    Min      = 16,
+    Max      = 250,
+    Default  = 16,
+    Callback = function(val)
+        SpeedValue = val
+        applyMovement()
+    end,
+})
+
+MovTab:CreateSlider({
+    Name     = "Jump Power",
+    Min      = 50,
+    Max      = 400,
+    Default  = 50,
+    Callback = function(val)
+        JumpValue = val
+        applyMovement()
+    end,
+})
+
+MovTab:CreateToggle({
+    Name     = "Noclip",
+    Default  = false,
+    Callback = function(state)
+        NoclipEnabled = state
+        if not state then
+            local char = getCharacter(LocalPlayer)
+            if char then
+                for _, part in ipairs(char:GetDescendants()) do
+                    if part:IsA("BasePart") then
+                        part.CanCollide = true
+                    end
+                end
+            end
+        end
+    end,
+})
+
+MovTab:CreateButton({
+    Name     = "Reset Speed & Jump",
+    Callback = function()
+        SpeedValue = 16
+        JumpValue  = 50
+        applyMovement()
+    end,
+})
+
+-- ┌─ TAB 2 : ESP ───────────────────────────────────────────────────────────┐
+local ESPTab = Window:CreateTab({
+    Name = "👁 ESP",
+    Icon = "rbxassetid://7733715400",
+})
+
+ESPTab:CreateToggle({
+    Name     = "Enemy ESP Boxes",
+    Default  = false,
+    Callback = function(state)
+        if state then enableESP() else disableESP() end
+    end,
+})
+
+ESPTab:CreateToggle({
+    Name     = "Show Name Labels",
+    Default  = true,
+    Callback = function(state)
+        for _, entry in pairs(ESPBoxes) do
+            entry.label.Visible = state
+        end
+    end,
+})
+
+ESPTab:CreateColorPicker({
+    Name     = "ESP Box Color",
+    Default  = Color3.fromRGB(255, 60, 100),
+    Callback = function(color)
+        for _, entry in pairs(ESPBoxes) do
+            entry.box.Color3       = color
+            entry.label.TextColor3 = color
+        end
+    end,
+})
+
+ESPTab:CreateSlider({
+    Name     = "Box Thickness",
+    Min      = 1,
+    Max      = 10,
+    Default  = 5,
+    Callback = function(val)
+        local thickness = val / 100
+        for _, entry in pairs(ESPBoxes) do
+            entry.box.LineThickness = thickness
+        end
+    end,
+})
+
+-- ┌─ TAB 3 : UTILITY ───────────────────────────────────────────────────────┐
+local UtilTab = Window:CreateTab({
+    Name = "🛠 Utility",
+    Icon = "rbxassetid://7734053495",
+})
+
+UtilTab:CreateLabel("🌹 RoseX — Murderer vs Sheriff")
+
+UtilTab:CreateToggle({
+    Name     = "Infinite Jump",
+    Default  = false,
+    Callback = function(state)
+        if state then
+            _G.RoseX_InfJump = UserInputService.JumpRequest:Connect(function()
+                local hum = getHumanoid(LocalPlayer)
+                if hum then hum:ChangeState(Enum.HumanoidStateType.Jumping) end
+            end)
+        else
+            if _G.RoseX_InfJump then
+                _G.RoseX_InfJump:Disconnect()
+                _G.RoseX_InfJump = nil
+            end
+        end
+    end,
+})
+
+UtilTab:CreateToggle({
+    Name     = "Anti-AFK",
+    Default  = true,
+    Callback = function(state)
+        if state then
+            _G.RoseX_AntiAFK = RunService.Heartbeat:Connect(function()
+                LocalPlayer.Idled:Wait()
+                local vip = game:GetService("VirtualInputManager")
+                pcall(function()
+                    vip:SendKeyEvent(true,  Enum.KeyCode.W, false, game)
+                    vip:SendKeyEvent(false, Enum.KeyCode.W, false, game)
+                end)
+            end)
+        else
+            if _G.RoseX_AntiAFK then
+                _G.RoseX_AntiAFK:Disconnect()
+                _G.RoseX_AntiAFK = nil
+            end
+        end
+    end,
+})
+
+UtilTab:CreateButton({
+    Name     = "Rejoin Server",
+    Callback = function()
+        local TeleportService = game:GetService("TeleportService")
+        TeleportService:Teleport(game.PlaceId, LocalPlayer)
+    end,
+})
+
+UtilTab:CreateButton({
+    Name     = "Copy My UserID",
+    Callback = function()
+        setclipboard(tostring(LocalPlayer.UserId))
+    end,
+})
+
+UtilTab:CreateLabel("Panel toggle: RightShift (Obsidian default)")
+
+-- ── Done ───────────────────────────────────────────────────────────────────
+print("[RoseX] Admin panel loaded. Welcome, " .. LocalPlayer.Name .. "!")
